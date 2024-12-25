@@ -2,7 +2,6 @@
 import socket
 import threading
 import pickle
-1
 
 
 class DistributedKeyValueStoreNode:
