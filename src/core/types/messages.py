@@ -16,3 +16,4 @@ class Message:
     key: str
     value: Optional[Any] = None
     timestamp: float = time.time()
+    sender_id: Optional[str] = None
