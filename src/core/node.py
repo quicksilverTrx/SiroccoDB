@@ -1,3 +1,4 @@
+#src/core/node.py
 import socket
 from .interfaces.node import INode
 from .storage.memory_store import MemoryStore
@@ -5,18 +6,21 @@ from .types.states import NodeState
 from typing import List, Tuple, Any,Optional
 import threading
 from .network.connection import Connection
+import logging
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 class DistributedKeyValueStoreNode(INode):
     """Base Node implementation for a distributed key-value store"""
 
-    def _init_(self, node_id : str, host : str, port : int):
+    def __init__(self, node_id : str, host : str, port : int):
         self.node_id = node_id
         self.host = host
         self.port = port
 
         self._store = MemoryStore()
         self.state = NodeState.INACTIVE
-        self._peers = List[Tuple[str,str,int]] = []
+        self._peers : List[Tuple[str,str,int]] = []
 
         #network
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -63,24 +67,27 @@ class DistributedKeyValueStoreNode(INode):
         """Runs in a continuous loop, accepting new connections and delegating them to individual handler threads.
           _listen runs in the listener thread, accepting client connections one at a time.
           For each connection, _listen spawns a handler thread, which runs _handle_connection to process the communication."""
-        while self.running:
+        while self._running:
             try:
+                logger.debug(f"Listening for connections on {self.host}:{self.port}")
                 client_socket, _ = self._socket.accept() # Accept an incoming connection and Returns a new client_socket for communication 
+                logger.debug(f"Accepted connection from {client_socket.getpeername()}")
                 handler = threading.Thread(target=self._handle_connection, args=(client_socket,))  # Pass the accepted socket to the handler
                 handler.daemon = True  # Ensure thread stops when the main program exits
                 handler.start() # Start a new thread to handle the connection
             except Exception as e:
-                    print(f"Error accepting connection: {e}")
+                    logger.error(f"Error accepting connection: {e}")
     
     def _handle_connection(self, client_socket : socket.socket):
         try:
             message= Connection.receive_message(client_socket)
+            logger.debug(f"Received message {message}")
             if message and self.replcation_strategy:
                 response = self.replication_strategy.handle_message(self, message)
                 if response:
                     Connection.send_message(client_socket, response)
         except Exception as e:
-            print(f"Error handling connection: {e}")
+            logger.info(f"Error handling connection: {e}")
         finally:
             client_socket.close()
                 
