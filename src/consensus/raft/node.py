@@ -18,7 +18,7 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.INFO) 
 class RaftState(Enum):
     """Raft node states"""
     FOLLOWER = "FOLLOWER"
@@ -64,22 +64,29 @@ class RaftNode(DistributedKeyValueStoreNode):
         super().__init__(node_id, host, port)
         
         # Raft-specific state
-        self.raft_state = RaftState.FOLLOWER
-        self.current_term = 0
-        self.voted_for: Optional[str] = None
+        self.raft_state = RaftState.FOLLOWER 
+        self.current_term = 0  # Latest term server has seen
+        self.voted_for: Optional[str] = None  # CandidateId that received vote in current term
         self.leader_id: Optional[str] = None
         
         # Volatile state
-        self.commit_index = 0
-        self.last_applied = 0
+        self.commit_index = -1 # Highest log entry known to be committed
+        self.last_applied = -1  # Highest log entry applied to state machine
         
         # Leader state
-        self.next_index: Dict[str, int] = {}
-        self.match_index: Dict[str, int] = {}
+        self.next_index: Dict[str, int] = {} # For each server, index of next log entry to send
+        self.match_index: Dict[str, int] = {}   # For each server, index of highest log replicated
         
         # Timing
         self.election_timeout = random.uniform(150, 300) / 1000  # 150-300ms
         self.last_heartbeat = time.time()
+
+        # Add state change locks
+        self._state_lock = threading.Lock()
+        self._term_lock = threading.Lock()
+        
+        # Add state change callbacks
+        self._state_callbacks = []
         
         # Log entries
         self.log: List[Dict] = []  # [{term: int, command: dict}]
@@ -89,14 +96,44 @@ class RaftNode(DistributedKeyValueStoreNode):
         self._heartbeat_thread: Optional[threading.Thread] = None
         
     def start(self):
-        """Start the node with Raft consensus"""
-        super().start()
-        
-        # Initialize election thread
-        self._election_thread = threading.Thread(target=self._run_election_timer)
-        self._election_thread.daemon = True
-        self._election_thread.start()
-        
+        # In consensus/raft/node.py
+        """Start the node with proper initialization sequence"""
+        try:
+            # First start the network listener
+            super().start()
+            logger.info(f"Node {self.node_id} network listener started")
+            
+            # Wait a bit for socket to be ready
+            time.sleep(0.5)
+            
+            # Now start Raft-specific components
+            self._election_thread = threading.Thread(target=self._run_election_timer)
+            self._election_thread.daemon = True
+            self._election_thread.start()
+            
+            logger.info(f"Node {self.node_id} fully started")
+            
+        except Exception as e:
+            logger.error(f"Failed to start node: {e}")
+            raise
+    
+    def debug_state(self):
+        """Debug helper to print node state"""
+        state = {
+            'node_id': self.node_id,
+            'raft_state': self.raft_state,
+            'current_term': self.current_term,
+            'commit_index': self.commit_index,
+            'last_applied': self.last_applied,
+            'log': self.log,
+            'store_data': self._store._data,
+            'leader_id': self.leader_id
+        }
+        logger.info(f"Node state: {state}")
+        return state
+    
+
+
     def stop(self):
         """Stop the node"""
         super().stop()
@@ -117,13 +154,16 @@ class RaftNode(DistributedKeyValueStoreNode):
             
         self.raft_state = RaftState.FOLLOWER
         time.sleep(0.1)  # Wait for cleanup
-        
+    
     def write(self, key: str, value: Any) -> bool:
         """Write operation through Raft consensus"""
         if self.raft_state != RaftState.LEADER:
             if self.leader_id:
                 # Forward to leader
                 leader_info = next((p for p in self._peers if p[0] == self.leader_id), None)
+                if not leader_info:
+                    logger.debug(f"Leader {self.leader_id} not found in peers")
+                    return False
                 if leader_info:
                     try:
                         _, host, port = leader_info
@@ -134,19 +174,28 @@ class RaftNode(DistributedKeyValueStoreNode):
                             term=self.current_term,
                             sender_id=self.node_id
                         )
+                        logger.debug(f"Forwarding write to leader {self.leader_id}")
                         response = Connection.send_message(host, port, message)
                         return response.value if response else False
                     except Exception as e:
                         logger.error(f"Failed to forward write to leader: {e}")
-            return False
-            
+                return False
+                
         # Leader handles write
         entry = {
             'term': self.current_term,
             'command': {'key': key, 'value': value, 'operation': 'WRITE'}
         }
         self.log.append(entry)
-        return self._replicate_log_entry(len(self.log) - 1)
+        logger.debug(f"Leader {self.node_id} appending entry to log: {entry}")
+        
+        if self._replicate_log_entry(len(self.log) - 1):
+            logger.debug("Log entry replicated successfully")
+            self._update_commit_index()
+            logger.debug(f"Updated commit index. Current store state: {self._store._data}")
+            return True
+        logger.warning("Failed to replicate log entry")
+        return False
         
     def _handle_connection(self, client_socket: socket.socket):
         """Override to handle Raft-specific messages."""
@@ -166,28 +215,42 @@ class RaftNode(DistributedKeyValueStoreNode):
             client_socket.close()
 
     def _run_election_timer(self):
-        """Run election timeout loop"""
+
+        """Improved election timeout handling"""
         while self._running:
-            logger.debug(f"Node {self.node_id} state: {self.raft_state}")
-            time.sleep(1)  # Small sleep to prevent busy waiting
-            
-            if self.raft_state == RaftState.LEADER:
-                continue
+            try:
+                current_time = time.time()
                 
-            if time.time() - self.last_heartbeat > self.election_timeout:
-                logger.debug(f"Node {self.node_id} election timeout")
-                self._start_election()
+                with self._state_lock:
+                    if self.raft_state == RaftState.LEADER:
+                        time.sleep(0.1)
+                        continue
+                        
+                    if current_time - self.last_heartbeat > self.election_timeout:
+                        self._start_election()
+                    else:
+                        # Adaptive sleep to prevent busy waiting
+                        sleep_time = min(
+                            0.1,  # Max sleep time
+                            self.election_timeout - (current_time - self.last_heartbeat)
+                        )
+                        time.sleep(sleep_time)
+                        
+            except Exception as e:
+                logger.error(f"Election timer error: {e}", exc_info=True)
+                time.sleep(1)  # Prevent rapid retries on error
 
     def _reset_election_timeout(self):
         """Reset election timeout with randomization   Increase randomization range for better split vote prevention"""
         BASE_TIMEOUT = 150  # milliseconds
-        TIMEOUT_RANGE = 150  # milliseconds
+        TIMEOUT_RANGE = 300  # milliseconds
         self.election_timeout = (BASE_TIMEOUT + random.uniform(0, TIMEOUT_RANGE)) / 1000
         self.last_heartbeat = time.time()
                 
     def _start_election(self):
         """Start a new election"""
-        logger.info(f"Node {self.node_id} starting election")
+        time.sleep(random.uniform(0.01, 0.05))  # Small random delay to avoid synchronized elections
+        logger.debug(f"Node {self.node_id} starting election")
         self.raft_state = RaftState.CANDIDATE
         self.current_term += 1
         self.voted_for = self.node_id
@@ -216,7 +279,7 @@ class RaftNode(DistributedKeyValueStoreNode):
                 logger.debug(f"{response}")
 
                 if response:
-                    #  Check for higher term in response and revert to follower if necessary
+                     #Check for higher term in response and revert to follower if necessary
                     if response.term > self.current_term:
                         self.current_term = response.term
                         self.raft_state = RaftState.FOLLOWER
@@ -224,7 +287,7 @@ class RaftNode(DistributedKeyValueStoreNode):
                         return
                     if  response.value:
                         votes_received += 1
-                    
+                        logger.info(f"{self.node_id} received {votes_received} votes")
                         # Check if we have majority
                         if votes_received > (len(self._peers) + 1) / 2:
                             self._become_leader()
@@ -233,10 +296,11 @@ class RaftNode(DistributedKeyValueStoreNode):
             except Exception as e:
                 logger.error(f"Failed to request vote from {peer_id}: {e}")
                 logger.error(f"Error handling connection on node {self.node_id}: {e}")
-            logger.error("Traceback:", exc_info=True)  # Logs the full traceback
+            #logger.error("Traceback:", exc_info=True)  # Logs the full traceback
                 
     def _become_leader(self):
         """Transition to leader state"""
+        logger.info(f"Node {self.node_id} became leader")
         if self.raft_state == RaftState.CANDIDATE:
             self.raft_state = RaftState.LEADER
             self.leader_id = self.node_id
@@ -244,22 +308,82 @@ class RaftNode(DistributedKeyValueStoreNode):
             # Initialize leader state
             for peer_id, _, _ in self._peers:
                 self.next_index[peer_id] = len(self.log)
-                self.match_index[peer_id] = 0
+                self.match_index[peer_id] = -1
+            # Append empty entry to establish leadership (CRITICAL)
+            noop_entry = {
+                'term': self.current_term,
+                'command': {'operation': 'NOOP'}
+            }
+            self.log.append(noop_entry)
+            self._replicate_log_entry(len(self.log) - 1)
                 
             # Start heartbeat thread
             self._heartbeat_thread = threading.Thread(target=self._send_heartbeats)
             self._heartbeat_thread.daemon = True
             self._heartbeat_thread.start()
+
+    def _forward_read_to_leader(self, key: str) -> Optional[Any]:
+        """Forward read request to current leader"""
+        if not self.leader_id:
+            logger.warning(f"No leader known to forward read request")
+            return None
             
+        # Find leader's connection info
+        leader_info = next(
+            (p for p in self._peers if p[0] == self.leader_id), 
+            None
+        )
+        
+        if not leader_info:
+            logger.error(f"Leader {self.leader_id} not found in peers")
+            return None
+            
+        try:
+            _, host, port = leader_info
+            message = RaftMessage(
+                type=RaftMessageType.READ,
+                key=key,
+                term=self.current_term,
+                sender_id=self.node_id
+            )
+            
+            response = Connection.send_message(host, port, message)
+            if response:
+                return response.value
+                
+        except Exception as e:
+            logger.error(f"Failed to forward read to leader: {e}")
+            
+        return None    
+    
+    def _handle_read_request(self, message: RaftMessage) -> RaftMessage:
+        """Handle read request"""
+        value = None
+        if self.raft_state == RaftState.LEADER:
+            value = self._store.read(message.key)[0] if self._store.read(message.key) else None
+            
+        return RaftMessage(
+            type=RaftMessageType.READ_RESPONSE,
+            key=message.key,
+            value=value,
+            term=self.current_term,
+            sender_id=self.node_id
+        )
     def _send_heartbeats(self):
         """Send periodic heartbeats to maintain leadership"""
         while self._running and self.raft_state == RaftState.LEADER:
             for peer_id, host, port in self._peers:
                 try:
-                    prev_log_index = self.next_index[peer_id] - 1
-                    prev_log_term = self.log[prev_log_index]['term'] if prev_log_index >= 0 else 0
+                    next_index = self.next_index.get(peer_id, 0)
+                    prev_log_index = next_index - 1
+                    #prev_log_term = self.log[prev_log_index]['term'] if prev_log_index >= 0 else 0
+                    prev_log_term = 0
+                    if prev_log_index >= 0 and prev_log_index < len(self.log):
+                        prev_log_term = self.log[prev_log_index]['term']
                     
-                    entries = self.log[self.next_index[peer_id]:]
+                    # Get entries to send
+                    entries = self.log[next_index:] if next_index < len(self.log) else []
+                    #entries = self.log[self.next_index[peer_id]:]
                     
                     message = RaftMessage(
                         type=RaftMessageType.APPEND_ENTRIES,
@@ -284,8 +408,8 @@ class RaftNode(DistributedKeyValueStoreNode):
                             return
                             
                         if response.value:
-                            self.next_index[peer_id] = prev_log_index + len(entries) + 1
-                            self.match_index[peer_id] = prev_log_index + len(entries)
+                            self.next_index[peer_id] = next_index + len(entries)
+                            self.match_index[peer_id] = self.next_index[peer_id] - 1
                             self._update_commit_index()
                         else:
                             self.next_index[peer_id] = max(0, self.next_index[peer_id] - 1)
@@ -293,40 +417,32 @@ class RaftNode(DistributedKeyValueStoreNode):
                 except Exception as e:
                     logger.error(f"Failed to send heartbeat to {peer_id}: {e}")
                     
-            time.sleep(0.05)  # 50ms heartbeat interval
+            time.sleep(0.05 + random.uniform(0, 0.02))  # Add jitter to heartbeat interval
             
     def _update_commit_index(self):
-        """Update commit index based on majority replication"""
+        if self.raft_state != RaftState.LEADER:
+            return
+        
+        # Try to advance the commit index
         for n in range(self.commit_index + 1, len(self.log)):
             if self.log[n]['term'] == self.current_term:
-                replicated_count = 1  # Count self
+                # Count replicas including self
+                replicated_count = 1
                 for peer_id in self.match_index:
                     if self.match_index[peer_id] >= n:
                         replicated_count += 1
                         
+                # If majority have replicated, update commit index
                 if replicated_count > (len(self._peers) + 1) / 2:
+                    prev_commit = self.commit_index
                     self.commit_index = n
+                    logger.debug(f"Leader updating commit index from {prev_commit} to {n}")
                     self._apply_committed_entries()
                     
-    def _apply_committed_entries(self):
-        """Apply committed entries to state machine"""
-        while self.last_applied < self.commit_index:
-            self.last_applied += 1
-            entry = self.log[self.last_applied]
-            command = entry['command']
-            
-            if command['operation'] == 'WRITE':
-                self._store.write(command['key'], command['value'])
-            elif command['operation'] == 'CONFIG_CHANGE':
-                self._handle_config_change(command)
-            
-        # Check if we should create a snapshot
-        if self.should_create_snapshot():
-            self.create_snapshot()
 
     def _handle_message(self, message: RaftMessage) -> Optional[RaftMessage]:
-        logger.debug(f"Received message: {message}")
-        logger.debug(f"Message type resolved to: {message.type}")
+        #logger.debug(f"Received message: {message}")
+        #logger.debug(f"Message type resolved to: {message.type}")
         """Handle incoming Raft messages"""
         if message.term > self.current_term:
             self.current_term = message.term
@@ -336,17 +452,18 @@ class RaftNode(DistributedKeyValueStoreNode):
         handlers = {
             RaftMessageType.REQUEST_VOTE: self._handle_vote_request,
             RaftMessageType.APPEND_ENTRIES: self._handle_append_entries,
-            RaftMessageType.WRITE: self._handle_write_request
+            RaftMessageType.WRITE: self._handle_write_request,
+            RaftMessageType.READ: self._handle_read_request,
         }
-        print(message.type)
+
         handler = handlers.get(message.type)
-        print(handler)
+
         return handler(message) if handler else None
     
     def _handle_vote_request(self, message: RaftMessage) -> RaftMessage:
         """Handle incoming vote request"""
         grant_vote = False
-        print(message)
+        #print(message)
         if message.term < self.current_term:
             grant_vote = False
         elif self.voted_for is None or self.voted_for == message.sender_id:
@@ -375,13 +492,19 @@ class RaftNode(DistributedKeyValueStoreNode):
             term=self.current_term,
             sender_id=self.node_id
         )
-    
     def _handle_append_entries(self, message: RaftMessage) -> RaftMessage:
         """Handle incoming append entries (heartbeat)"""
+
+    
+        # self._last_processed_message = message_id
+        logger.debug(f"Node {self.node_id} handling AppendEntries")
+        logger.debug(f"Current term: {self.current_term}, Message term: {message.term}")
+        
         success = False
         self.last_heartbeat = time.time()
         
         if message.term < self.current_term:
+            logger.debug("Rejecting AppendEntries - lower term")
             return RaftMessage(
                 type=RaftMessageType.APPEND_ENTRIES_RESPONSE,
                 key="",
@@ -390,35 +513,62 @@ class RaftNode(DistributedKeyValueStoreNode):
                 sender_id=self.node_id
             )
             
+        if message.term > self.current_term:
+            logger.debug(f"Updating term from {self.current_term} to {message.term}")
+            self.current_term = message.term
+            self.voted_for = None
+            
         if self.raft_state != RaftState.FOLLOWER:
+            logger.debug(f"Converting to follower from {self.raft_state}")
             self.raft_state = RaftState.FOLLOWER
             
         self.leader_id = message.sender_id
         
-        # Extract message data
         prev_log_index = message.value['prev_log_index']
         prev_log_term = message.value['prev_log_term']
         entries = message.value['entries']
         leader_commit = message.value['leader_commit']
         
-        # Check previous log entry
+        logger.debug(f"Processing AppendEntries - prev_index: {prev_log_index}, prev_term: {prev_log_term}, entries: {entries}")
+        logger.debug(f"Leader commit: {leader_commit}, Current log: {self.log}")
+        
         if prev_log_index >= len(self.log):
-            success = False
+            logger.debug("Rejecting AppendEntries - missing previous log entry")
+            return RaftMessage(
+            type=RaftMessageType.APPEND_ENTRIES_RESPONSE,
+            key="",
+            value=False,
+            term=self.current_term,
+            sender_id=self.node_id
+        )
         elif prev_log_index == -1:
+            logger.debug("Empty log case")
             success = True
+            self.log = []
+            self.log.extend(entries)
         elif self.log[prev_log_index]['term'] == prev_log_term:
+            logger.debug("Log matching successful")
             success = True
-            
-            # Remove conflicting entries and append new ones
+            for i, new_entry in enumerate(entries):
+                log_idx = prev_log_index + 1 + i
+                if log_idx < len(self.log):
+                    if self.log[log_idx]['term'] != new_entry['term']:
+                        # Terms don't match, truncate log and append new entries
+                        self.log = self.log[:log_idx]
+                        break
             self.log = self.log[:prev_log_index + 1]
             self.log.extend(entries)
             
-            # Update commit index
-            if leader_commit > self.commit_index:
+            if  success and leader_commit > self.commit_index:
+                old_commit = self.commit_index
                 self.commit_index = min(leader_commit, len(self.log) - 1)
-                self._apply_committed_entries()
+                logger.debug(f"Updated commit index from {old_commit} to {self.commit_index}")
+                if self.commit_index > old_commit:
+                    self._apply_committed_entries()
+                    logger.debug(f"After apply, store state: {self._store._data}")
+            
         
-        
+        logger.debug(f"Returning AppendEntries response: {success}")
         return RaftMessage(
             type=RaftMessageType.APPEND_ENTRIES_RESPONSE,
             key="",
@@ -441,14 +591,16 @@ class RaftNode(DistributedKeyValueStoreNode):
             term=self.current_term,
             sender_id=self.node_id
         )
-        
+    
     def _replicate_log_entry(self, index: int) -> bool:
         """Replicate a log entry to followers"""
         if self.raft_state != RaftState.LEADER:
+            logger.debug(f"Node {self.node_id} not leader, cannot replicate")
             return False
             
         success_count = 1  # Count self
-
+        self.match_index[self.node_id] = index  # Update own match index
+        logger.debug(f"Leader {self.node_id} starting replication of index {index}")
         
         for peer_id, host, port in self._peers:
             try:
@@ -469,14 +621,53 @@ class RaftNode(DistributedKeyValueStoreNode):
                 )
                 
                 response = Connection.send_message(host, port, message)
-                if response and response.value:
-                    success_count += 1
-                    
+                if response:
+                    if response.value:
+                        success_count += 1
+                        self.match_index[peer_id] = index
+                        self.next_index[peer_id] = index + 1
+                        logger.debug(f"Successful replication to {peer_id}, match_index={index}")
+                        
             except Exception as e:
                 logger.error(f"Failed to replicate to {peer_id}: {e}")
+        
+        majority = (len(self._peers) + 1) // 2 + 1
+        logger.debug(f"Success count: {success_count}, needed majority: {majority}")
+        success = success_count >= majority
+        
+        if success:
+            # Here's the critical fix - we need to advance the commit index
+            # when we get majority replication
+            if self.log[index]['term'] == self.current_term:
+                old_commit = self.commit_index
+                # Advance commit index to the newly replicated entry
+                self.commit_index = index
+                logger.debug(f"Advanced commit index from {old_commit} to {index}")
                 
-        # Check if we have majority
-        return success_count > (len(self._peers) + 1) / 2
+                # Send new commit index to followers immediately
+                for peer_id, host, port in self._peers:
+                    try:
+                        message = RaftMessage(
+                            type=RaftMessageType.APPEND_ENTRIES,
+                            key="",
+                            value={
+                                'prev_log_index': index,
+                                'prev_log_term': self.log[index]['term'],
+                                'entries': [],  # Empty entries for commit update
+                                'leader_commit': self.commit_index  # New commit index
+                            },
+                            term=self.current_term,
+                            sender_id=self.node_id
+                        )
+                        Connection.send_message(host, port, message)
+                    except Exception as e:
+                        logger.error(f"Failed to send commit update to {peer_id}: {e}")
+                
+                # Apply the committed entries
+                self._apply_committed_entries()
+                logger.debug(f"After commit, store state: {self._store._data}")
+        
+        return success       
     
     # Add these methods to the existing RaftNode class
 
@@ -496,12 +687,20 @@ class RaftNode(DistributedKeyValueStoreNode):
     
     def restore_snapshot(self, snapshot: Dict):
         """Restore state from snapshot"""
-        self._store._data = snapshot['state']
-        self.last_applied = snapshot['last_included_index']
-        self.commit_index = snapshot['last_included_index']
-        
-        # Adjust log
-        self.log = []  # Clear log as it's now in snapshot
+        if 'last_included_index' not in snapshot or 'last_included_term' not in snapshot:
+            logger.error("Invalid snapshot received")
+            return
+        if not snapshot['state']:  # Check state, not entries
+            self.commit_index = -1
+            self.last_applied = -1
+            return False            
+        else:
+            self._store._data = snapshot['state']
+            self.last_applied = snapshot['last_included_index']
+            self.commit_index = snapshot['last_included_index']
+            
+            # Adjust log
+            self.log = []  # Clear log as it's now in snapshot
         
     def should_create_snapshot(self) -> bool:
         """Check if we should create a snapshot
@@ -520,7 +719,11 @@ class RaftNode(DistributedKeyValueStoreNode):
         # Ensure leadership is still valid
         if not self._check_leadership():
             return None
-            
+        
+        if self.commit_index == -1:
+            return None  # No committed entries yet
+
+    
         # Read after checking leadership
         return self._store.read(key)[0] if self._store.read(key) else None
         
@@ -594,3 +797,65 @@ class RaftNode(DistributedKeyValueStoreNode):
                 ))
                 self.next_index[server_id] = len(self.log)
                 self.match_index[server_id] = 0
+
+   
+
+    
+
+
+
+    
+
+    
+
+
+    def _send_commit_index_update(self):
+        """Send immediate commit index update to followers"""
+        for peer_id, host, port in self._peers:
+            try:
+                message = RaftMessage(
+                    type=RaftMessageType.APPEND_ENTRIES,
+                    key="",
+                    value={
+                        'prev_log_index': len(self.log) - 1,
+                        'prev_log_term': self.log[-1]['term'] if self.log else 0,
+                        'entries': [],
+                        'leader_commit': self.commit_index  # Send updated commit index
+                    },
+                    term=self.current_term,
+                    sender_id=self.node_id
+                )
+                Connection.send_message(host, port, message)
+            except Exception as e:
+                logger.error(f"Failed to send commit update to {peer_id}: {e}")
+
+
+    def _apply_committed_entries(self):
+        """Apply committed entries to state machine"""
+        logger.debug(f"Node {self.node_id} applying entries. Commit index: {self.commit_index}, Last applied: {self.last_applied}")
+        
+        while self.last_applied < self.commit_index:
+            self.last_applied += 1
+            entry = self.log[self.last_applied]
+            command = entry['command']
+            
+            if command['operation'] == 'WRITE':
+                timestamp = time.time()
+                logger.debug(f"Applying write command: {command}")
+                success = self._store.write(
+                    command['key'], 
+                    command['value'],
+                    timestamp
+                )
+                logger.debug(f"Write success: {success}")
+                if not success:
+                    logger.error(f"Failed to apply write command: {command}")
+                else:
+                    logger.debug(f"Successfully applied write. Store state: {self._store._data}")
+            elif command['operation'] == 'CONFIG_CHANGE':
+                self._handle_config_change(command)
+        #Check if we should create a snapshot
+        if self.should_create_snapshot():
+            self.create_snapshot()
+
+    
