@@ -1,0 +1,407 @@
+python -m unittest  test_raft_basic.py -v
+
+===============================================================================
+test_10_write_linearizability (test_raft_basic.TestRaftBasic)
+Verify that writes are linearizable ... INFO:test_raft_basic:
+============================================================
+INFO:test_raft_basic:Starting new test case
+INFO:test_raft_basic:============================================================
+INFO:test_raft_basic:Creating 9 nodes starting at port 6000
+INFO:test_raft_basic:Setting up test Raft cluster...
+INFO:test_raft_basic:Setup complete. Cluster initialized.
+INFO:test_raft_basic:
+=== Starting write linearizability test ===
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node3
+INFO:test_raft_basic:Using leader node3 for linearizability test
+INFO:test_raft_basic:Pre-test cluster state:
+INFO:test_raft_basic:Node node0: log size=1, commit_index=0
+INFO:test_raft_basic:Node node1: log size=1, commit_index=0
+INFO:test_raft_basic:Node node2: log size=1, commit_index=0
+INFO:test_raft_basic:Node node3: log size=1, commit_index=0
+INFO:test_raft_basic:Node node4: log size=1, commit_index=0
+INFO:test_raft_basic:Node node5: log size=1, commit_index=0
+INFO:test_raft_basic:Node node6: log size=1, commit_index=0
+INFO:test_raft_basic:Node node7: log size=1, commit_index=0
+INFO:test_raft_basic:Node node8: log size=1, commit_index=0
+INFO:test_raft_basic:Attempting write #1: key='key0', value='value0'
+INFO:test_raft_basic:Write #1 succeeded in 0.009s
+INFO:test_raft_basic:Attempting write #2: key='key1', value='value1'
+INFO:test_raft_basic:Write #2 succeeded in 0.007s
+INFO:test_raft_basic:Attempting write #3: key='key2', value='value2'
+INFO:test_raft_basic:Write #3 succeeded in 0.006s
+INFO:test_raft_basic:Attempting write #4: key='key3', value='value3'
+INFO:test_raft_basic:Write #4 succeeded in 0.005s
+INFO:test_raft_basic:Attempting write #5: key='key4', value='value4'
+INFO:test_raft_basic:Write #5 succeeded in 0.005s
+INFO:test_raft_basic:Verifying read consistency across nodes...
+INFO:test_raft_basic:Checking reads on node0:
+INFO:test_raft_basic:  key0: expected='value0', actual='value0'
+INFO:test_raft_basic:  key1: expected='value1', actual='value1'
+INFO:test_raft_basic:  key2: expected='value2', actual='value2'
+INFO:test_raft_basic:  key3: expected='value3', actual='value3'
+INFO:test_raft_basic:  key4: expected='value4', actual='value4'
+INFO:test_raft_basic:Checking reads on node1:
+INFO:test_raft_basic:  key0: expected='value0', actual='value0'
+INFO:test_raft_basic:  key1: expected='value1', actual='value1'
+INFO:test_raft_basic:  key2: expected='value2', actual='value2'
+INFO:test_raft_basic:  key3: expected='value3', actual='value3'
+INFO:test_raft_basic:  key4: expected='value4', actual='value4'
+INFO:test_raft_basic:Checking reads on node2:
+INFO:test_raft_basic:  key0: expected='value0', actual='value0'
+INFO:test_raft_basic:  key1: expected='value1', actual='value1'
+INFO:test_raft_basic:  key2: expected='value2', actual='value2'
+INFO:test_raft_basic:  key3: expected='value3', actual='value3'
+INFO:test_raft_basic:  key4: expected='value4', actual='value4'
+INFO:test_raft_basic:Checking reads on node3:
+INFO:test_raft_basic:  key0: expected='value0', actual='value0'
+INFO:test_raft_basic:  key1: expected='value1', actual='value1'
+INFO:test_raft_basic:  key2: expected='value2', actual='value2'
+INFO:test_raft_basic:  key3: expected='value3', actual='value3'
+INFO:test_raft_basic:  key4: expected='value4', actual='value4'
+INFO:test_raft_basic:Checking reads on node4:
+INFO:test_raft_basic:  key0: expected='value0', actual='value0'
+INFO:test_raft_basic:  key1: expected='value1', actual='value1'
+INFO:test_raft_basic:  key2: expected='value2', actual='value2'
+INFO:test_raft_basic:  key3: expected='value3', actual='value3'
+INFO:test_raft_basic:  key4: expected='value4', actual='value4'
+INFO:test_raft_basic:Checking reads on node5:
+INFO:test_raft_basic:  key0: expected='value0', actual='value0'
+INFO:test_raft_basic:  key1: expected='value1', actual='value1'
+INFO:test_raft_basic:  key2: expected='value2', actual='value2'
+INFO:test_raft_basic:  key3: expected='value3', actual='value3'
+INFO:test_raft_basic:  key4: expected='value4', actual='value4'
+INFO:test_raft_basic:Checking reads on node6:
+INFO:test_raft_basic:  key0: expected='value0', actual='value0'
+INFO:test_raft_basic:  key1: expected='value1', actual='value1'
+INFO:test_raft_basic:  key2: expected='value2', actual='value2'
+INFO:test_raft_basic:  key3: expected='value3', actual='value3'
+INFO:test_raft_basic:  key4: expected='value4', actual='value4'
+INFO:test_raft_basic:Checking reads on node7:
+INFO:test_raft_basic:  key0: expected='value0', actual='value0'
+INFO:test_raft_basic:  key1: expected='value1', actual='value1'
+INFO:test_raft_basic:  key2: expected='value2', actual='value2'
+INFO:test_raft_basic:  key3: expected='value3', actual='value3'
+INFO:test_raft_basic:  key4: expected='value4', actual='value4'
+INFO:test_raft_basic:Checking reads on node8:
+INFO:test_raft_basic:  key0: expected='value0', actual='value0'
+INFO:test_raft_basic:  key1: expected='value1', actual='value1'
+INFO:test_raft_basic:  key2: expected='value2', actual='value2'
+INFO:test_raft_basic:  key3: expected='value3', actual='value3'
+INFO:test_raft_basic:  key4: expected='value4', actual='value4'
+INFO:test_raft_basic:Final cluster state:
+INFO:test_raft_basic:Node node0: log size=6, commit_index=5
+INFO:test_raft_basic:Node node1: log size=6, commit_index=5
+INFO:test_raft_basic:Node node2: log size=6, commit_index=5
+INFO:test_raft_basic:Node node3: log size=6, commit_index=5
+INFO:test_raft_basic:Node node4: log size=6, commit_index=5
+INFO:test_raft_basic:Node node5: log size=6, commit_index=5
+INFO:test_raft_basic:Node node6: log size=6, commit_index=5
+INFO:test_raft_basic:Node node7: log size=6, commit_index=5
+INFO:test_raft_basic:Node node8: log size=6, commit_index=5
+INFO:test_raft_basic:
+=== Tearing down test case ===
+INFO:test_raft_basic:Tearing down test Raft cluster...
+INFO:test_raft_basic:Teardown complete.
+ok
+test_1_initial_leader_election (test_raft_basic.TestRaftBasic)
+Test that a single leader is elected ... INFO:test_raft_basic:
+============================================================
+INFO:test_raft_basic:Starting new test case
+INFO:test_raft_basic:============================================================
+INFO:test_raft_basic:Creating 9 nodes starting at port 6000
+INFO:test_raft_basic:Setting up test Raft cluster...
+INFO:test_raft_basic:Setup complete. Cluster initialized.
+INFO:test_raft_basic:
+=== Starting initial leader election test ===
+INFO:test_raft_basic:Initial cluster state:
+INFO:test_raft_basic:Node node0: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node1: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node2: state=RaftState.LEADER, term=6
+INFO:test_raft_basic:Node node3: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node4: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node5: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node6: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node7: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node8: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node2
+INFO:test_raft_basic:Leader election result: node2
+INFO:test_raft_basic:
+Verifying cluster stability (timeout=5s)
+INFO:test_raft_basic:Current state: leader=node2, followers=8
+INFO:test_raft_basic:Cluster stability verified ✓
+INFO:test_raft_basic:
+Verifying leader election stability:
+INFO:test_raft_basic:Checking for consistent terms across nodes...
+INFO:test_raft_basic:Terms found in cluster: {6}
+INFO:test_raft_basic:Final cluster state:
+INFO:test_raft_basic:Node node0: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node1: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node2: state=RaftState.LEADER, term=6
+INFO:test_raft_basic:Node node3: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node4: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node5: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node6: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node7: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:Node node8: state=RaftState.FOLLOWER, term=6
+INFO:test_raft_basic:
+=== Tearing down test case ===
+INFO:test_raft_basic:Tearing down test Raft cluster...
+INFO:test_raft_basic:Teardown complete.
+ok
+test_2_basic_replication (test_raft_basic.TestRaftBasic)
+Test basic log replication ... INFO:test_raft_basic:
+============================================================
+INFO:test_raft_basic:Starting new test case
+INFO:test_raft_basic:============================================================
+INFO:test_raft_basic:Creating 9 nodes starting at port 6000
+INFO:test_raft_basic:Setting up test Raft cluster...
+INFO:test_raft_basic:Setup complete. Cluster initialized.
+INFO:test_raft_basic:
+=== Starting basic replication test ===
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node3
+INFO:test_raft_basic:Using leader node3 for replication test
+INFO:test_raft_basic:Pre-write cluster state:
+INFO:test_raft_basic:Node node0: log size=3, commit_index=2
+INFO:test_raft_basic:Node node1: log size=3, commit_index=2
+INFO:test_raft_basic:Node node2: log size=3, commit_index=2
+INFO:test_raft_basic:Node node3: log size=3, commit_index=2
+INFO:test_raft_basic:Node node4: log size=3, commit_index=2
+INFO:test_raft_basic:Node node5: log size=3, commit_index=2
+INFO:test_raft_basic:Node node6: log size=3, commit_index=2
+INFO:test_raft_basic:Node node7: log size=3, commit_index=2
+INFO:test_raft_basic:Node node8: log size=3, commit_index=2
+INFO:test_raft_basic:Attempting write: key='test_key', value='test_value'
+INFO:test_raft_basic:Write operation succeeded
+INFO:test_raft_basic:
+Verifying cluster stability (timeout=5s)
+INFO:test_raft_basic:Current state: leader=node3, followers=8
+INFO:test_raft_basic:Cluster stability verified ✓
+INFO:test_raft_basic:Testing basic log replication...
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node3
+INFO:test_raft_basic:
+Verifying replication across nodes:
+INFO:test_raft_basic:Node node0: value='test_value'
+INFO:test_raft_basic:Node node1: value='test_value'
+INFO:test_raft_basic:Node node2: value='test_value'
+INFO:test_raft_basic:Node node3: value='test_value'
+INFO:test_raft_basic:Node node4: value='test_value'
+INFO:test_raft_basic:Node node5: value='test_value'
+INFO:test_raft_basic:Node node6: value='test_value'
+INFO:test_raft_basic:Node node7: value='test_value'
+INFO:test_raft_basic:Node node8: value='test_value'
+INFO:test_raft_basic:Post-replication cluster state:
+INFO:test_raft_basic:Node node0: value='test_value', log size=5, commit_index=4
+INFO:test_raft_basic:Node node1: value='test_value', log size=5, commit_index=4
+INFO:test_raft_basic:Node node2: value='test_value', log size=5, commit_index=4
+INFO:test_raft_basic:Node node3: value='test_value', log size=5, commit_index=4
+INFO:test_raft_basic:Node node4: value='test_value', log size=5, commit_index=4
+INFO:test_raft_basic:Node node5: value='test_value', log size=5, commit_index=4
+INFO:test_raft_basic:Node node6: value='test_value', log size=5, commit_index=4
+INFO:test_raft_basic:Node node7: value='test_value', log size=5, commit_index=4
+INFO:test_raft_basic:Node node8: value='test_value', log size=5, commit_index=4
+INFO:test_raft_basic:
+=== Tearing down test case ===
+INFO:test_raft_basic:Tearing down test Raft cluster...
+INFO:test_raft_basic:Teardown complete.
+ok
+test_3_leader_failure (test_raft_basic.TestRaftBasic)
+Test handling of leader failure ... INFO:test_raft_basic:
+============================================================
+INFO:test_raft_basic:Starting new test case
+INFO:test_raft_basic:============================================================
+INFO:test_raft_basic:Creating 9 nodes starting at port 6000
+INFO:test_raft_basic:Setting up test Raft cluster...
+INFO:test_raft_basic:Setup complete. Cluster initialized.
+INFO:test_raft_basic:
+=== Starting leader failure test ===
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node4
+INFO:test_raft_basic:Initial leader: node4, term=9
+INFO:test_raft_basic:Cluster state before leader failure:
+INFO:test_raft_basic:Node node0: state=RaftState.FOLLOWER, term=9
+INFO:test_raft_basic:Node node1: state=RaftState.FOLLOWER, term=9
+INFO:test_raft_basic:Node node2: state=RaftState.FOLLOWER, term=9
+INFO:test_raft_basic:Node node3: state=RaftState.FOLLOWER, term=9
+INFO:test_raft_basic:Node node4: state=RaftState.LEADER, term=9
+INFO:test_raft_basic:Node node5: state=RaftState.FOLLOWER, term=9
+INFO:test_raft_basic:Node node6: state=RaftState.FOLLOWER, term=9
+INFO:test_raft_basic:Node node7: state=RaftState.FOLLOWER, term=9
+INFO:test_raft_basic:Node node8: state=RaftState.FOLLOWER, term=9
+INFO:test_raft_basic:
+Verifying cluster stability (timeout=5s)
+INFO:test_raft_basic:Current state: leader=node4, followers=8
+INFO:test_raft_basic:Cluster stability verified ✓
+INFO:test_raft_basic:Testing leader failure handling...
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node4
+INFO:test_raft_basic:
+Stopping initial leader: node4
+INFO:test_raft_basic:Waiting for new leader election...
+INFO:test_raft_basic:
+Verifying cluster stability (timeout=5s)
+INFO:test_raft_basic:Current state: leader=node6, followers=8
+INFO:test_raft_basic:Cluster stability verified ✓
+INFO:test_raft_basic:New leader after recovery: node6
+INFO:test_raft_basic:Final cluster state:
+INFO:test_raft_basic:Node node0: state=RaftState.FOLLOWER, term=10
+INFO:test_raft_basic:Node node1: state=RaftState.FOLLOWER, term=10
+INFO:test_raft_basic:Node node2: state=RaftState.FOLLOWER, term=10
+INFO:test_raft_basic:Node node3: state=RaftState.FOLLOWER, term=10
+INFO:test_raft_basic:Node node4: state=RaftState.FOLLOWER, term=9
+INFO:test_raft_basic:Node node5: state=RaftState.FOLLOWER, term=10
+INFO:test_raft_basic:Node node6: state=RaftState.LEADER, term=10
+INFO:test_raft_basic:Node node7: state=RaftState.FOLLOWER, term=10
+INFO:test_raft_basic:Node node8: state=RaftState.FOLLOWER, term=10
+INFO:test_raft_basic:
+=== Tearing down test case ===
+INFO:test_raft_basic:Tearing down test Raft cluster...
+INFO:test_raft_basic:Teardown complete.
+ok
+test_4_term_voting (test_raft_basic.TestRaftBasic)
+Test term increments and voting behavior ... INFO:test_raft_basic:
+============================================================
+INFO:test_raft_basic:Starting new test case
+INFO:test_raft_basic:============================================================
+INFO:test_raft_basic:Creating 9 nodes starting at port 6000
+INFO:test_raft_basic:Setting up test Raft cluster...
+INFO:test_raft_basic:Setup complete. Cluster initialized.
+INFO:test_raft_basic:Testing term and voting behavior...
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node3
+INFO:test_raft_basic:
+=== Tearing down test case ===
+INFO:test_raft_basic:Tearing down test Raft cluster...
+INFO:test_raft_basic:Teardown complete.
+ok
+test_5_network_partition (test_raft_basic.TestRaftBasic)
+Test handling of network partition ... INFO:test_raft_basic:
+============================================================
+INFO:test_raft_basic:Starting new test case
+INFO:test_raft_basic:============================================================
+INFO:test_raft_basic:Creating 9 nodes starting at port 6000
+INFO:test_raft_basic:Setting up test Raft cluster...
+INFO:test_raft_basic:Setup complete. Cluster initialized.
+INFO:test_raft_basic:Testing network partition...
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node3
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node5
+INFO:test_raft_basic:
+=== Tearing down test case ===
+INFO:test_raft_basic:Tearing down test Raft cluster...
+INFO:test_raft_basic:Teardown complete.
+ok
+test_6_log_consistency (test_raft_basic.TestRaftBasic)
+Test log consistency and conflict resolution ... INFO:test_raft_basic:
+============================================================
+INFO:test_raft_basic:Starting new test case
+INFO:test_raft_basic:============================================================
+INFO:test_raft_basic:Creating 9 nodes starting at port 6000
+INFO:test_raft_basic:Setting up test Raft cluster...
+INFO:test_raft_basic:Setup complete. Cluster initialized.
+INFO:test_raft_basic:
+Verifying cluster stability (timeout=5s)
+INFO:test_raft_basic:Current state: leader=node2, followers=8
+INFO:test_raft_basic:Cluster stability verified ✓
+INFO:test_raft_basic:Testing log consistency...
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node2
+INFO:test_raft_basic:
+=== Tearing down test case ===
+INFO:test_raft_basic:Tearing down test Raft cluster...
+INFO:test_raft_basic:Teardown complete.
+ok
+test_7_commit_safety (test_raft_basic.TestRaftBasic)
+Test commit safety and majority consensus ... INFO:test_raft_basic:
+============================================================
+INFO:test_raft_basic:Starting new test case
+INFO:test_raft_basic:============================================================
+INFO:test_raft_basic:Creating 9 nodes starting at port 6000
+INFO:test_raft_basic:Setting up test Raft cluster...
+INFO:test_raft_basic:Setup complete. Cluster initialized.
+INFO:test_raft_basic:
+Verifying cluster stability (timeout=5s)
+INFO:test_raft_basic:Current state: leader=node3, followers=8
+INFO:test_raft_basic:Cluster stability verified ✓
+INFO:test_raft_basic:Testing commit safety...
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node3
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node8
+INFO:test_raft_basic:
+=== Tearing down test case ===
+INFO:test_raft_basic:Tearing down test Raft cluster...
+INFO:test_raft_basic:Teardown complete.
+ok
+test_8_stale_leader (test_raft_basic.TestRaftBasic)
+Test handling of stale leader ... INFO:test_raft_basic:
+============================================================
+INFO:test_raft_basic:Starting new test case
+INFO:test_raft_basic:============================================================
+INFO:test_raft_basic:Creating 9 nodes starting at port 6000
+INFO:test_raft_basic:Setting up test Raft cluster...
+INFO:test_raft_basic:Setup complete. Cluster initialized.
+INFO:test_raft_basic:
+Verifying cluster stability (timeout=5s)
+INFO:test_raft_basic:Current state: leader=node1, followers=8
+INFO:test_raft_basic:Cluster stability verified ✓
+INFO:test_raft_basic:Testing stale leader handling...
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node1
+INFO:test_raft_basic:
+Verifying cluster stability (timeout=5s)
+INFO:test_raft_basic:Current state: leader=node8, followers=8
+INFO:test_raft_basic:Cluster stability verified ✓
+INFO:test_raft_basic:
+=== Tearing down test case ===
+INFO:test_raft_basic:Tearing down test Raft cluster...
+INFO:test_raft_basic:Teardown complete.
+ok
+test_9_leader_election_safety (test_raft_basic.TestRaftBasic)
+Verify that at most one leader can be elected per term ... INFO:test_raft_basic:
+============================================================
+INFO:test_raft_basic:Starting new test case
+INFO:test_raft_basic:============================================================
+INFO:test_raft_basic:Creating 9 nodes starting at port 6000
+INFO:test_raft_basic:Setting up test Raft cluster...
+INFO:test_raft_basic:Setup complete. Cluster initialized.
+INFO:test_raft_basic:Testing leader election safety...
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node1
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node7
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node8
+INFO:test_raft_basic:
+Waiting for leader election (timeout: 10.0s)
+INFO:test_raft_basic:Leader elected: node3
+INFO:test_raft_basic:
+=== Tearing down test case ===
+INFO:test_raft_basic:Tearing down test Raft cluster...
+INFO:test_raft_basic:Teardown complete.
+ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 164.907s
+
+OK
