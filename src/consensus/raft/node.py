@@ -13,12 +13,12 @@ from src.core.network.connection import Connection
 import traceback
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.CRITICAL,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO) 
+logger.setLevel(logging.CRITICAL) 
 class RaftState(Enum):
     """Raft node states"""
     FOLLOWER = "FOLLOWER"
@@ -96,22 +96,31 @@ class RaftNode(DistributedKeyValueStoreNode):
         self._heartbeat_thread: Optional[threading.Thread] = None
         
     def start(self):
-        # In consensus/raft/node.py
         """Start the node with proper initialization sequence"""
         try:
             # First start the network listener
             super().start()
-            logger.info(f"Node {self.node_id} network listener started")
+            logger.debug(f"Node {self.node_id} network listener started")
             
-            # Wait a bit for socket to be ready
-            time.sleep(0.5)
+            # Reset state on start
+            self.raft_state = RaftState.FOLLOWER
+            self.current_term = 0
+            self.voted_for = None
+            self.leader_id = None
+            
+            # Initialize election timeout with some randomization
+            self._reset_election_timeout()
+            
+            # Add small random delay before starting election timer
+            # This helps prevent simultaneous elections
+            time.sleep(random.uniform(0.1, 0.5))
             
             # Now start Raft-specific components
             self._election_thread = threading.Thread(target=self._run_election_timer)
             self._election_thread.daemon = True
             self._election_thread.start()
             
-            logger.info(f"Node {self.node_id} fully started")
+            logger.debug(f"Node {self.node_id} fully started")
             
         except Exception as e:
             logger.error(f"Failed to start node: {e}")
@@ -138,6 +147,8 @@ class RaftNode(DistributedKeyValueStoreNode):
         """Stop the node"""
         super().stop()
         self._running = False
+        # Clear peer list to prevent further communication attempts
+        self._peers = []
         
         # Close any open connections
         if hasattr(self, '_server_socket'):
@@ -227,7 +238,10 @@ class RaftNode(DistributedKeyValueStoreNode):
                         continue
                         
                     if current_time - self.last_heartbeat > self.election_timeout:
-                        self._start_election()
+                        # Add pre-election delay to help prevent split votes
+                        time.sleep(random.uniform(0.05, 0.15))
+                        if current_time - self.last_heartbeat > self.election_timeout:
+                            self._start_election()
                     else:
                         # Adaptive sleep to prevent busy waiting
                         sleep_time = min(
@@ -241,9 +255,10 @@ class RaftNode(DistributedKeyValueStoreNode):
                 time.sleep(1)  # Prevent rapid retries on error
 
     def _reset_election_timeout(self):
-        """Reset election timeout with randomization   Increase randomization range for better split vote prevention"""
-        BASE_TIMEOUT = 150  # milliseconds
-        TIMEOUT_RANGE = 300  # milliseconds
+        """Reset election timeout with increased randomization"""
+        # Increase timeout range for better split vote prevention
+        BASE_TIMEOUT = 300  # milliseconds (increased from 150)
+        TIMEOUT_RANGE = 500  # milliseconds (increased from 300)
         self.election_timeout = (BASE_TIMEOUT + random.uniform(0, TIMEOUT_RANGE)) / 1000
         self.last_heartbeat = time.time()
                 
@@ -459,11 +474,33 @@ class RaftNode(DistributedKeyValueStoreNode):
         handler = handlers.get(message.type)
 
         return handler(message) if handler else None
+    def _update_term(self, new_term: int):
+        """Update term and step down if necessary"""
+        logger.info(f"Node {self.node_id} updating term from {self.current_term} to {new_term}")
+        if new_term > self.current_term:
+            self.current_term = new_term
+            self.voted_for = None
+            if self.raft_state == RaftState.LEADER:
+                logger.info(f"Node {self.node_id} stepping down from leader due to higher term")
+                self.raft_state = RaftState.FOLLOWER
+                self._stop_leader_tasks()  # Method to stop heartbeats etc.
+            self._reset_election_timeout()
+
+    def _stop_leader_tasks(self):
+        """Stop leader-specific tasks"""
+        if hasattr(self, '_heartbeat_thread') and self._heartbeat_thread:
+            self._heartbeat_thread = None
+        # Reset leader state
+        self.next_index = {}
+        self.match_index = {}
+        logger.info(f"Node {self.node_id}: Stopping leader-specific tasks. Clearing next_index and match_index.")
     
     def _handle_vote_request(self, message: RaftMessage) -> RaftMessage:
         """Handle incoming vote request"""
         grant_vote = False
         #print(message)
+        logger.debug(f"Node {self.node_id}: Received REQUEST_VOTE from {message.sender_id} for term {message.term}")
+
         if message.term < self.current_term:
             grant_vote = False
         elif self.voted_for is None or self.voted_for == message.sender_id:
